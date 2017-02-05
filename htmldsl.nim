@@ -73,8 +73,7 @@ macro html*(name:untyped, inner:untyped):typed=
       return res
 
 proc newHead*(title:HtmlNode,meta:varargs[HtmlNode]): HtmlNode = 
-  result = HtmlNode(kind:nkHead, title:title, meta: @[])
-  result.meta &= meta
+  result = HtmlNode(kind:nkHead, title:title, meta: @meta)
 
 macro head*(inner:untyped):HtmlNode =
   if inner.kind == nnkCall :
@@ -90,9 +89,8 @@ proc meta*(name,val:string):HtmlNode = HtmlNode(kind:nkMeta,name:name,content:va
 
 proc title*(x:string):HtmlNode = HtmlNode(kind:nkTitle, val: x)
 
-proc newBody*(sons:varargs[HtmlNode]): HtmlNode = 
-  result = HtmlNode(kind:nkBody, sons: @[]) 
-  result.sons &= sons
+proc newBody*(sons:varargs[HtmlNode]):HtmlNode=  
+  result = HtmlNode(kind:nkBody, sons: @sons) 
    
 macro body*(inner:untyped):HtmlNode = 
   if inner.kind == nnkCall :
@@ -103,8 +101,7 @@ macro body*(inner:untyped):HtmlNode =
       result.add(i)
 
 proc newDiv*(sons:varargs[HtmlNode]): HtmlNode = 
-  result = HtmlNode(kind:nkDiv, sons: @[]) 
-  result.sons &= sons
+  result = HtmlNode(kind:nkDiv, sons: @sons) 
    
 macro dv*(inner:untyped):HtmlNode = 
   # div is a keyword, integer div
