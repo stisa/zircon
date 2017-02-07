@@ -1,4 +1,5 @@
-import strutils,macros
+import strutils
+import macros except body
 
 type HtmlNodeKind* = enum
   nkHtml,
@@ -40,37 +41,33 @@ type HtmlNode* = ref object
 proc `$`*(n:HtmlNode):string =
   case n.kind:
   of nkHtml:
-    return "Html:\n  " & $n.head & "\n  " & $n.body
+    return "Html:" & $n.head & ", " & $n.body
   of nkHead:
-    result = "Head:\n  " & $n.title 
+    result = "Head:" & $n.title 
     for m in n.meta:
-      result &= "\n  "& $m
+      result &= $m
   of nkMeta:
-    return "  Meta: " & $n.name & ": " & $n.content
+    return "Meta:" & $n.name & "->" & $n.content
   of nkBody:
-    result ="Body:\n  "
+    result ="Body:"
     for s in n.sons:
-     result &= $s & "\n  "
+     result &= $s
   of nkDiv:
-    result ="  Div:\n  "
+    result ="Div:"
     for s in n.sons:
-     result &= $s & "\n  "
+     result &= $s
   of nkTitle:
-    return "  Title:" & $n.val
+    return "Title:" & $n.val
   of nkP:
-    return "    P:" & $n.text
+    return "P:" & $n.text
   else:
     return "#gibberish" 
 
-macro html*(name:untyped, inner:untyped):typed=
-  let h = inner[0] #TODO: do not assume a well formed html page, eg account for missing head etc
-  let b = inner[1]
-  result = quote do:
-    proc `name`():HtmlNode =
-      var res= HtmlNode(kind: nkHtml)
-      res.head = `h`
-      res.body = `b`
-      return res
+template dump(n:NimNode) =
+  echo "-----v----"
+  echo treerepr n
+  echo n.tostrlit 
+  echo "-----^----"
 
 proc newHead*(title:HtmlNode,meta:varargs[HtmlNode]): HtmlNode = 
   result = HtmlNode(kind:nkHead, title:title, meta: @meta)
@@ -89,54 +86,77 @@ proc meta*(name,val:string):HtmlNode = HtmlNode(kind:nkMeta,name:name,content:va
 
 proc title*(x:string):HtmlNode = HtmlNode(kind:nkTitle, val: x)
 
-proc newBody*(sons:varargs[HtmlNode]):HtmlNode=  
-  result = HtmlNode(kind:nkBody, sons: @sons) 
-   
-macro body*(inner:untyped):HtmlNode = 
-  if inner.kind == nnkCall :
-    result = newCall("newBody",inner)  
-  else:
-    result = newCall(!"newBody")
-    for i in inner:
-      result.add(i)
+proc p*(x:varargs[string, `$`]):Htmlnode {.discardable} =
+  result = Htmlnode(kind:nkp, text: (@x).join("i "))
 
 proc newDiv*(sons:varargs[HtmlNode]): HtmlNode = 
   result = HtmlNode(kind:nkDiv, sons: @sons) 
    
 macro dv*(inner:untyped):HtmlNode = 
-  # div is a keyword, integer div
-  if inner.kind == nnkCall :
-    result = newCall("newDiv",inner)  
-  else:
-   # expandmacros inner
-    result = newCall(!"newDiv")
+  result = newCall("newDiv",inner)
+  #[var hseq = newnimnode(nnkBracket)
+  if inner.len == 1:
+    hseq.add(inner[0])
+  elif inner.len > 1 :
     for i in inner:
-      result.add(i)
+      hseq.add(i)
+  else:
+    echo "wtf"
+  result.add(prefix(hseq,"@"))
+]#
+proc newBody*(sons:seq[HtmlNode]):HtmlNode =  
+  result = HtmlNode(kind:nkBody, sons: sons) 
 
-proc p*(x:varargs[string, `$`]):HtmlNode = 
-  var xx = ""
-  for s in x: xx &= s
-  result = HtmlNode(kind:nkP, text: xx)
+macro body*(inner:untyped):HtmlNode = 
+  result = newCall("newBody")
+  var hseq = newnimnode(nnkBracket)
+  if inner.len == 1:
+    hseq.add(inner[0])
+  elif inner.len > 1 :
+    for i in inner:
+      hseq.add(i)
+  else:
+    echo "wtf"
+  result.add(prefix(hseq,"@"))
 
-#[macro repeat(times:static[int],inner:untyped):untyped =  
-  result = newNimnode(nnkBracket)
-  for i in 1..times:
-    for n in inner:
-      result.add(n)]#
+proc newHtml*(h,b:HtmlNode): HtmlNode = 
+  result = HtmlNode(kind:nkHtml,head:h,body:b)
 
-proc repeat*(times:int=1,what:HtmlNode): seq[HtmlNode] =
-  result = newSeq[HtmlNode](times)
-  for el in result.mitems: el =what
+macro html*(name:untyped, inner:untyped):typed=
+  let h = inner[0] #TODO: do not assume a well formed html page, eg account for missing head etc
+  let b = inner[1]
+  var rs = newCall("newHtml",h,b)
+  #echo "rs------"
+  #echo treerepr rs
+  #echo "------rs"
+  result = quote do:
+    proc `name`():HtmlNode = `rs`
 
-when isMainModule:
+macro htmlast(name,t:untyped):typed = 
+  var tt = t
+  echo tt.kind
+  result = newstmtlist()
+  var varsect = newNimNode(nnkIdentDefs)
+  varsect.add(name)
+  varsect.add(newidentnode("HtmlNode"))
+  varsect.add(tt)
+  result.add(newnimnode(nnkVarSection).add(varsect))
+  dump result
+
+when true:
   var x = 2
+  let author = "stisa"
    
-  html pg :
+  html page :
     head:
-      title(if x==2:"hi" else:"ho")
-      meta "author", "stisa"
+      title(if x==2:"two" else:"nottwo")
+      meta "author", author
     body:
+      p("hello") 
+      p("world")
       dv:
-        repeat(2,p "Ha")
-
-  echo pg()
+        p "from a"
+        dv:
+          p "dsl","!!"
+     
+  echo page()
