@@ -1,8 +1,14 @@
 import strutils
 import macros except body
 
+#[ TODO: using enums explicit string value $enum, create a mapping between enum and function that builds the node, to avoid all the quasi-same macros.]#
+
+# TODO: expand spec (links,style,img,src etc)
+# TODO: allow specifying id, class
+# TODO: render the ast to proper html
+
 type HtmlNodeKind* = enum
-  nkHtml,
+  nkHtml ="newHtml",
   nkHead,
   nkBody,
   nkDiv,
@@ -41,21 +47,21 @@ type HtmlNode* = ref object
 proc `$`*(n:HtmlNode):string =
   case n.kind:
   of nkHtml:
-    return "Html:" & $n.head & ", " & $n.body
+    return "Html:\n" & $n.head & "\n" & $n.body
   of nkHead:
-    result = "Head:" & $n.title 
+    result = "Head:" & $n.title
     for m in n.meta:
-      result &= $m
+      result &= "\n" & $m
   of nkMeta:
     return "Meta:" & $n.name & "->" & $n.content
   of nkBody:
     result ="Body:"
     for s in n.sons:
-     result &= $s
+     result &= ("\n" & $s)
   of nkDiv:
     result ="Div:"
     for s in n.sons:
-     result &= $s
+     result &= ("\n" & $s)
   of nkTitle:
     return "Title:" & $n.val
   of nkP:
@@ -73,12 +79,13 @@ proc newHead*(title:HtmlNode,meta:varargs[HtmlNode]): HtmlNode =
   result = HtmlNode(kind:nkHead, title:title, meta: @meta)
 
 macro head*(inner:untyped):HtmlNode =
-  if inner.kind == nnkCall :
-    result = newCall("newHead",inner)  
+  result = newCall("newHead")
+  if inner.len == 1:
+    result.add(inner)
+  elif inner.len > 1 :
+    inner.copychildrento(result)
   else:
-    result = newCall("newHead")
-    for i in inner:
-      result.add(i)
+    echo "headerror"
 
 proc a*(href,val:string):HtmlNode = HtmlNode(kind:nkA,href:href,aTxt:val)
 
@@ -86,38 +93,32 @@ proc meta*(name,val:string):HtmlNode = HtmlNode(kind:nkMeta,name:name,content:va
 
 proc title*(x:string):HtmlNode = HtmlNode(kind:nkTitle, val: x)
 
-proc p*(x:varargs[string, `$`]):Htmlnode {.discardable} =
+proc p*(x:varargs[string, `$`]):Htmlnode =
   result = Htmlnode(kind:nkp, text: (@x).join("i "))
 
 proc newDiv*(sons:varargs[HtmlNode]): HtmlNode = 
   result = HtmlNode(kind:nkDiv, sons: @sons) 
    
 macro dv*(inner:untyped):HtmlNode = 
-  result = newCall("newDiv",inner)
-  #[var hseq = newnimnode(nnkBracket)
+  result = newCall("newDiv")
   if inner.len == 1:
-    hseq.add(inner[0])
+    result.add(inner)
   elif inner.len > 1 :
-    for i in inner:
-      hseq.add(i)
+    inner.copychildrento(result)
   else:
-    echo "wtf"
-  result.add(prefix(hseq,"@"))
-]#
-proc newBody*(sons:seq[HtmlNode]):HtmlNode =  
-  result = HtmlNode(kind:nkBody, sons: sons) 
+    echo "dverror"
+
+proc newBody*(sons:varargs[HtmlNode]):HtmlNode = 
+  result = HtmlNode(kind:nkBody, sons: @sons) 
 
 macro body*(inner:untyped):HtmlNode = 
   result = newCall("newBody")
-  var hseq = newnimnode(nnkBracket)
   if inner.len == 1:
-    hseq.add(inner[0])
+    result.add(inner)
   elif inner.len > 1 :
-    for i in inner:
-      hseq.add(i)
+    inner.copychildrento(result)
   else:
-    echo "wtf"
-  result.add(prefix(hseq,"@"))
+    echo "bodyerror"
 
 proc newHtml*(h,b:HtmlNode): HtmlNode = 
   result = HtmlNode(kind:nkHtml,head:h,body:b)
