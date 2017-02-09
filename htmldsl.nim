@@ -94,12 +94,12 @@ proc meta*(name,val:string):HtmlNode = HtmlNode(kind:nkMeta,name:name,content:va
 proc title*(x:string):HtmlNode = HtmlNode(kind:nkTitle, val: x)
 
 proc p*(x:varargs[string, `$`]):Htmlnode =
-  result = Htmlnode(kind:nkp, text: (@x).join("i "))
+  result = Htmlnode(kind:nkp, text: (@x).join(" "))
 
 proc newDiv*(sons:varargs[HtmlNode]): HtmlNode = 
   result = HtmlNode(kind:nkDiv, sons: @sons) 
    
-macro dv*(inner:untyped):HtmlNode = 
+macro dv*(inner:untyped,id="",class:string=""):HtmlNode = 
   result = newCall("newDiv")
   if inner.len == 1:
     result.add(inner)
@@ -144,6 +144,80 @@ macro htmlast(name,t:untyped):typed =
   result.add(newnimnode(nnkVarSection).add(varsect))
   dump result
 
+proc render (n:HtmlNode):string{.discardable} =
+  case n.kind :
+  of nkhtml:
+    result = "<html>\n"
+  of nkhead: 
+    result = "<head>\n"
+  of nktitle:
+    result = "<title>"& n.val & "</title>\n"
+  of nkmeta:
+    result = "<meta name=\""& n.name & "\" content=\""& n.content & "\">\n"
+  of nkbody:
+    result = "<body>\n"
+  of nkp:
+    result = "<p>"& n.text & "</p>\n"
+  of nkdiv:
+    result = "<div>\n"
+  else:
+    result = "else" 
+  #result &= "\n"
+
+proc close(n:HtmlNode):string{.discardable} =
+  case n.kind :
+  of nkhtml:
+    result = "</html>"
+  of nkhead: 
+    result = "</head>"
+  of nkbody:
+    result = "</body>"
+  of nkdiv:
+    result = "</div>"
+  else:
+    result = "else"& $n.kind 
+  result &= "\n"
+
+
+proc transpile(n:HtmlNode):string =
+  result = ""
+  var il :int = 0 #indentlevel
+  case n.kind:
+  of nkhtml:
+    result &= render n
+    inc il
+    result &= indent( transpile(n.head),il)
+    result &= indent(transpile(n.body),il)
+    dec il
+    result &= close n
+  of nkhead:
+    result &= render n
+    inc il
+    for i in n.meta:
+      result &= indent(render(i),il)
+    result &= indent(render(n.title),il)
+    dec il
+    result &= close n
+  of nkBody:
+    result &= render n
+    inc il
+    for i in n.sons:
+      if i.kind == nkdiv:
+        result &= indent(transpile(i),il)
+      else: result &= indent(render(i),il)
+    dec il
+    result &= close n
+  of nkdiv:
+    result &= render n
+    inc il
+    for i in n.sons:
+      if i.kind == nkdiv:
+        result &= indent(transpile(i),il)
+      else: result &= indent(render(i),il)
+    dec il
+    result &= close n
+  else: discard
+
 when true:
   var x = 2
   let author = "stisa"
@@ -158,6 +232,24 @@ when true:
       dv:
         p "from a"
         dv:
-          p "dsl","!!"
+          p "dsl"
      
-  echo page()
+  echo transpile(page())
+#[ results in:
+<html>
+ <head>
+   <meta name="author" content="stisa">
+   <title>two</title>
+ </head>
+ <body>
+  <p>hello</p>
+  <p>world</p>
+  <div>
+   <p>from a</p>
+   <div>
+    <p>dsl</p>  
+   </div>
+  </div>
+ </body>
+</html>
+]#
