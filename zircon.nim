@@ -181,7 +181,7 @@ proc close(n:HtmlNode):string{.discardable} =
     result = "else"& $n.kind 
 
 
-proc transpile(n:HtmlNode):string =
+proc transpile*(n:HtmlNode):string =
   result = ""
   var il :int = 0 #indentlevel
   case n.kind:
@@ -220,7 +220,7 @@ proc transpile(n:HtmlNode):string =
     result &= close n
   else: discard
 
-macro a(inner:varargs[untyped]):HtmlNode =
+macro a*(inner:varargs[untyped]):HtmlNode =
   if inner[0].findchild(it.kind==nnkasgn)!=nil:
     var rest : tuple[class,id,href,atxt:NimNode]
     for i in inner[0]:
@@ -258,7 +258,7 @@ macro a(inner:varargs[untyped]):HtmlNode =
     result = newCall("newa")
     inner.copychildrento(result)
 
-when true:
+when isMainModule:
   var x = 2
   let author = "stisa"
    
@@ -279,22 +279,3 @@ when true:
             class="link"
      
   echo transpile(page())
-#[ results in:
-<html>
- <head>
-   <meta name="author" content="stisa">
-   <title>two</title>
- </head>
- <body>
-  <p>hello</p>
-  <p>world</p>
-  <div>
-   <p>from a</p>
-   <div>
-    <p>dsl</p>
-    <a id="" class"link" href="/">home</a>
-   </div>
-  </div>
- </body>
-</html>
-]#
