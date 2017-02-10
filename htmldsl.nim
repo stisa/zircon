@@ -1,14 +1,15 @@
 import strutils
 import macros except body
 
-#[ TODO: using enums explicit string value $enum, create a mapping between enum and function that builds the node, to avoid all the quasi-same macros.]#
-
+# TODO: avoid all the quasi-same macros.
 # TODO: expand spec (links,style,img,src etc)
 # TODO: allow specifying id, class
-# TODO: render the ast to proper html
+# TODO: render the ast to proper html, with proper indentation
+# TODO: group similar kinds together, eg div,body,section,header,footer,etc are all containers.
+# TODO: less verbose macros for a? also macro for id,class for other nodes
 
 type HtmlNodeKind* = enum
-  nkHtml ="newHtml",
+  nkHtml,
   nkHead,
   nkBody,
   nkDiv,
@@ -67,7 +68,7 @@ proc `$`*(n:HtmlNode):string =
   of nkP:
     return "P:" & $n.text
   else:
-    return "#gibberish" 
+    return "#gibberish"& $n.kind 
 
 template dump(n:NimNode) =
   echo "-----v----"
@@ -87,7 +88,10 @@ macro head*(inner:untyped):HtmlNode =
   else:
     echo "headerror"
 
-proc a*(href,val:string):HtmlNode = HtmlNode(kind:nkA,href:href,aTxt:val)
+proc newa*(href,val:string,id="",class=""):HtmlNode = 
+  result =HtmlNode(kind:nkA,href:href,aTxt:val)
+  result.id = id
+  result.class = class
 
 proc meta*(name,val:string):HtmlNode = HtmlNode(kind:nkMeta,name:name,content:val)
 
@@ -127,9 +131,6 @@ macro html*(name:untyped, inner:untyped):typed=
   let h = inner[0] #TODO: do not assume a well formed html page, eg account for missing head etc
   let b = inner[1]
   var rs = newCall("newHtml",h,b)
-  #echo "rs------"
-  #echo treerepr rs
-  #echo "------rs"
   result = quote do:
     proc `name`():HtmlNode = `rs`
 
@@ -142,7 +143,7 @@ macro htmlast(name,t:untyped):typed =
   varsect.add(newidentnode("HtmlNode"))
   varsect.add(tt)
   result.add(newnimnode(nnkVarSection).add(varsect))
-  dump result
+  #dump result
 
 proc render (n:HtmlNode):string{.discardable} =
   case n.kind :
@@ -160,6 +161,8 @@ proc render (n:HtmlNode):string{.discardable} =
     result = "<p>"& n.text & "</p>\n"
   of nkdiv:
     result = "<div>\n"
+  of nka:
+    result = "<a id=\""& n.id&"\" class=\""&n.class&"\""&" href=\"" & n.href & "\">" & n.atxt & "</a>"
   else:
     result = "else" 
   #result &= "\n"
@@ -169,14 +172,13 @@ proc close(n:HtmlNode):string{.discardable} =
   of nkhtml:
     result = "</html>"
   of nkhead: 
-    result = "</head>"
+    result = "</head>\n"
   of nkbody:
-    result = "</body>"
+    result = "</body>\n"
   of nkdiv:
-    result = "</div>"
+    result = "</div>\n"
   else:
     result = "else"& $n.kind 
-  result &= "\n"
 
 
 proc transpile(n:HtmlNode):string =
@@ -218,6 +220,44 @@ proc transpile(n:HtmlNode):string =
     result &= close n
   else: discard
 
+macro a(inner:varargs[untyped]):HtmlNode =
+  if inner[0].findchild(it.kind==nnkasgn)!=nil:
+    var rest : tuple[class,id,href,atxt:NimNode]
+    for i in inner[0]:
+      if i.kind == nnkasgn :
+        if i[0].ident == !"class":
+          rest.class = i[1]
+        elif i[0].ident == !"id":
+          rest.id = i[1]
+        else: echo "other asgn?"
+      else:
+        if rest.href == nil: 
+          rest.href = i
+        else:
+          rest.atxt = i
+    result = newCall("newa")
+    var sml = newstmtlist()
+    if rest.href != nil:
+      var eel = newnimnode(nnkexpreqexpr)
+      eel.add(newidentnode(!"href"),rest.href)
+      sml.add eel
+    if rest.atxt != nil:
+      var eel = newnimnode(nnkexpreqexpr)
+      eel.add(newidentnode(!"val"),rest.atxt)
+      sml.add eel
+    if rest.class != nil:
+      var eel = newnimnode(nnkexpreqexpr)
+      eel.add(newidentnode(!"class"),rest.class)
+      sml.add eel
+    if rest.id != nil:
+      var eel = newnimnode(nnkexpreqexpr)
+      eel.add(newidentnode(!"id"),rest.id)
+      sml.add eel
+    sml.copychildrento(result)
+  else:
+    result = newCall("newa")
+    inner.copychildrento(result)
+
 when true:
   var x = 2
   let author = "stisa"
@@ -233,6 +273,10 @@ when true:
         p "from a"
         dv:
           p "dsl"
+          a:
+            "/"
+            "home"
+            class="link"
      
   echo transpile(page())
 #[ results in:
@@ -247,7 +291,8 @@ when true:
   <div>
    <p>from a</p>
    <div>
-    <p>dsl</p>  
+    <p>dsl</p>
+    <a id="" class"link" href="/">home</a>
    </div>
   </div>
  </body>
